@@ -64,17 +64,18 @@ TEMPLATES = [{
     ]},
 }]
 
-if os.environ.get("DB_NAME"):
+if env("DB_NAME", ""):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.mysql",
-            "NAME": os.environ["DB_NAME"],
-            "USER": os.environ.get("DB_USER", "root"),
-            "PASSWORD": os.environ.get("DB_PASSWORD", ""),
-            "HOST": os.environ.get("DB_HOST", "localhost"),
-            "PORT": os.environ.get("DB_PORT", "3306"),
+            "NAME": env("DB_NAME"),
+            "USER": env("DB_USER", "root"),
+            "PASSWORD": env("DB_PASSWORD", ""),
+            "HOST": env("DB_HOST", "localhost"),
+            "PORT": env("DB_PORT", "3306"),
         }
     }
+    
 else:
     DATABASES = {
         "default": {
