@@ -8,6 +8,9 @@ from django.utils import timezone
 
 def private_storage():
     """Callable so migrations don't hard-code this machine's folder path."""
+    closed_at = models.DateTimeField(null=True, blank=True)
+    closed_by = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name="closed_support_tickets")
+    closed_by_name = models.CharField(max_length=120, blank=True)
     return FileSystemStorage(location=str(settings.PRIVATE_ROOT))
 
 ZERO = Decimal("0.00")
@@ -448,9 +451,12 @@ class SupportTicket(models.Model):
     subject = models.CharField(max_length=120)
     category = models.CharField(max_length=12, default="Inquiry", choices=[(x, x) for x in ("Account", "Transaction", "Complaint", "Inquiry")])
     priority = models.CharField(max_length=8, default="Normal", choices=[(x, x) for x in ("Low", "Normal", "High")])
-    status = models.CharField(max_length=12, default="Open", choices=[(x, x) for x in ("Open", "In Progress", "Resolved")])
+    status = models.CharField(max_length=12, default="Open", choices=[(x, x) for x in ("Open", "In Progress", "Resolved", "Closed")])
     created_at = models.DateTimeField(default=timezone.now)
     resolved_at = models.DateTimeField(null=True, blank=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    closed_by = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name="closed_support_tickets")
+    closed_by_name = models.CharField(max_length=120, blank=True)
 
     class Meta:
         ordering = ["-created_at"]

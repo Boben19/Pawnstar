@@ -288,12 +288,16 @@ def support_detail(request, pk):
     st = get_object_or_404(SupportTicket, pk=pk, customer=request.cust)
     form = F.ReplyForm(request.POST or None)
     form.fields.pop("status")
-    if request.method == "POST" and form.is_valid():
-        SupportMessage.objects.create(support_ticket=st, sender_user=request.user, message=form.cleaned_data["message"])
-        if st.status == "Resolved":
-            st.status, st.resolved_at = "Open", None
-            st.save()
-        return redirect("client_support_detail", pk=st.pk)
+    if request.method == "POST":
+        if st.status == "Closed":
+            messages.error(request, "This ticket is closed. Please open a new request if you need more help.")
+            return redirect("client_support_detail", pk=st.pk)
+        if form.is_valid():
+            SupportMessage.objects.create(support_ticket=st, sender_user=request.user, message=form.cleaned_data["message"])
+            if st.status == "Resolved":
+                st.status, st.resolved_at = "Open", None
+                st.save()
+            return redirect("client_support_detail", pk=st.pk)
     return render(request, "app/support_detail.html", {"s": st, "form": form})
 
 

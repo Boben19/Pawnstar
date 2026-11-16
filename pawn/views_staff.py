@@ -138,7 +138,7 @@ def dashboard(request):
         "cash_in": led.filter(direction="IN").aggregate(s=Sum("amount"))["s"] or 0,
         "cash_out": led.filter(direction="OUT").aggregate(s=Sum("amount"))["s"] or 0,
         "pending": Customer.objects.filter(status="Pending Verification").count(),
-        "support_open": SupportTicket.objects.exclude(status="Resolved").count(),
+        "support_open": SupportTicket.objects.filter(status__in=["Open", "In Progress"]).count(),
         "for_auction": PawnTicket.objects.filter(status="Expired").count(),
         "recent": Transaction.objects.select_related("customer", "transaction_type").order_by("-created_at")[:8],
         "pending_appraisals": Appraisal.objects.filter(result="Pending").count(),
@@ -587,21 +587,34 @@ def support(request):
              "url": f"/staff/support/{s.pk}/", "badge": 4} for s in page]
     return table(request, "Pawn Patrol", ["Subject", "Customer", "Category", "Priority", "Status", "Opened"], rows, page, qstr,
                  search=True, sort_options=SUPPORT_SORT,
-                 filter_name="status", filter_options=["Open", "In Progress", "Resolved"])
+                 filter_name="status", filter_options=["Open", "In Progress", "Resolved", "Closed"])
 
 
 @staff_only(CASHIER)
 def support_detail(request, pk):
     s = get_object_or_404(SupportTicket.objects.select_related("customer"), pk=pk)
-    form = F.ReplyForm(request.POST or None, initial={"status": "In Progress"})
-    if request.method == "POST" and form.is_valid():
-        SupportMessage.objects.create(support_ticket=s, sender_user=request.user, message=form.cleaned_data["message"])
-        s.assigned_to = s.assigned_to or request.emp
-        s.status = form.cleaned_data["status"] or s.status
-        s.resolved_at = timezone.now() if s.status == "Resolved" else None
-        s.save()
-        messages.success(request, "Reply sent.")
-        return redirect("support_detail", pk=s.pk)
+    form = F.ReplyForm(request.POST or None, initial={"status": s.status})
+    if request.method == "POST":
+        if s.status == "Closed":
+            messages.error(request, "This ticket is closed and cannot receive replies.")
+            return redirect("support_detail", pk=s.pk)
+        if request.POST.get("action") == "close":
+            s.status = "Closed"
+            s.closed_by = request.emp
+            s.closed_by_name = request.emp.full_name
+            s.closed_at = timezone.now()
+            s.resolved_at = s.resolved_at or s.closed_at
+            s.save()
+            messages.success(request, "Ticket closed. Replies are now disabled.")
+            return redirect("support_detail", pk=s.pk)
+        if form.is_valid():
+            SupportMessage.objects.create(support_ticket=s, sender_user=request.user, message=form.cleaned_data["message"])
+            s.assigned_to = s.assigned_to or request.emp
+            s.status = form.cleaned_data["status"] or s.status
+            s.resolved_at = timezone.now() if s.status == "Resolved" else None
+            s.save()
+            messages.success(request, "Reply sent.")
+            return redirect("support_detail", pk=s.pk)
     return render(request, "staff/support_detail.html", {"s": s, "form": form})
 
 

@@ -3,5 +3,10 @@
 <h1>{{ s.subject }} <span class="badge {{ s.status|badge }}">{{ s.status }}</span></h1>
 <p class="soft">{{ s.customer.full_name }} ({{ s.customer.code }}), {{ s.category }}, opened {{ s.created_at|date:"M d, g:i A" }}</p>
 <div class="card flat">{% for m in s.messages.all %}<div style="margin-bottom:14px"><b>{{ m.sender_user.get_full_name|default:m.sender_user.username }}</b> <span class="soft small">{{ m.sent_at|date:"M d, g:i A" }}</span><br>{{ m.message|linebreaksbr }}</div>{% endfor %}</div>
+{% if s.status == "Closed" %}
+<div class="card flat"><strong>Ticket closed</strong><p>Closed by: {{ s.closed_by_name|default:"Unknown staff member" }}</p><p>Closed on: {{ s.closed_at|date:"M d, Y g:i A" }}</p><p>This conversation is read-only.</p></div>
+{% else %}
 <form method="post" class="card flat" style="max-width:640px">{% csrf_token %}{% include "staff/_fields.html" %}<button class="btn">Send reply</button></form>
+<form method="post" style="margin-top:16px">{% csrf_token %}<input type="hidden" name="action" value="close"><button class="btn" type="submit" onclick="return confirm('Close this ticket? No one will be able to reply.')">Close Ticket</button></form>
+{% endif %}
 {% endblock %}
