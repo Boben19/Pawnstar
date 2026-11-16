@@ -48,7 +48,7 @@
 </nav>
 <div class="side-scrim" aria-hidden="true"></div>
 <main class="main" id="main">
-  <div class="topbar"><button class="btn ghost sm menu-btn" type="button" aria-label="Open menu">Menu</button><form action="/staff/lookup/" method="get" role="search"><input class="in" id="quick-find" name="q" placeholder="Scan or find a ticket or transaction (press /)" aria-label="Quick find" autocomplete="off"><button class="btn sm">Find</button></form></div>
+  <div class="topbar"><form action="/staff/lookup/" method="get" role="search"><input class="in" id="quick-find" name="q" placeholder="Scan or find a ticket or transaction (press /)" aria-label="Quick find" autocomplete="off"><button class="btn sm">Find</button></form></div>
   {% for m in messages %}<div class="flash {{ m.tags }}" role="status">{{ m }}</div>{% endfor %}
   {% block content %}{% endblock %}
 </main>
