@@ -283,7 +283,7 @@ class EmployeeForm(Styled):
 
     def __init__(self, *args, instance=None, **kwargs):
         self.instance = instance
-        if instance and not args and "initial" not in kwargs:
+        if instance and not (args and args[0] is not None) and "initial" not in kwargs:
             kwargs["initial"] = dict(username=instance.user.username, first_name=instance.first_name,
                                      last_name=instance.last_name, role=instance.user.role, branch=instance.branch,
                                      position=instance.position, contact_no=instance.contact_no,
