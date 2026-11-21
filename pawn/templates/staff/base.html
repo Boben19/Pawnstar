@@ -34,8 +34,8 @@
   <a class="nav {% if '/admin/employees' in p %}on{% endif %}" href="/staff/admin/employees/">Employees</a>
   <a class="nav {% if '/admin/branches' in p %}on{% endif %}" href="/staff/admin/branches/">Branches</a>
   <a class="nav {% if '/admin/categories' in p %}on{% endif %}" href="/staff/admin/categories/">Rates and categories</a>
-  <a class="nav {% if '/admin/currencies' in p or '/admin/rates' in p %}on{% endif %}" href="/staff/admin/currencies/">Currencies</a>
-  <a class="nav" href="/staff/admin/rates/">Exchange rates</a>
+  <a class="nav {% if '/admin/currencies' in p %}on{% endif %}" href="/staff/admin/currencies/">Currencies</a>
+  <a class="nav {% if '/admin/rates' in p %}on{% endif %}" href="/staff/admin/rates/">Exchange rates</a>
   <a class="nav {% if '/admin/idtypes' in p %}on{% endif %}" href="/staff/admin/idtypes/">Accepted IDs</a>
   <a class="nav {% if '/admin/sms' in p %}on{% endif %}" href="/staff/admin/sms/">SMS log</a>
   <a class="nav {% if '/admin/audit' in p %}on{% endif %}" href="/staff/admin/audit/">Audit log</a>
