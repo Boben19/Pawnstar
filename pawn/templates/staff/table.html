@@ -2,7 +2,14 @@
 {% block content %}
 <div class="row between"><h1>{{ title }}</h1>
 <span class="row">{% if add_url %}<a class="btn" href="{{ add_url }}">{{ add_label|default:"Add" }}</a>{% endif %}
-{% if backup %}<form method="post">{% csrf_token %}<button class="btn">Back up now</button></form>{% endif %}</span></div>
+{% if backup %}<form method="post">{% csrf_token %}<button class="btn">Back up now</button></form>{% endif %}
+{% if refresh_rates_url %}
+<form method="post" action="{{ refresh_rates_url }}">
+    {% csrf_token %}
+    <button type="submit" class="btn ghost">Refresh All Rates</button>
+</form>
+{% endif %}
+</span></div>
 {% if report %}<form class="search no-print" method="get">{% if date_filter %}<input class="in" type="date" name="start" value="{{ start }}"><input class="in" type="date" name="end" value="{{ end }}"><button class="btn ghost sm">Apply</button>{% endif %}
 <a class="btn ghost sm" href="?start={{ start }}&end={{ end }}&fmt=pdf">Download PDF</a><a class="btn ghost sm" href="?start={{ start }}&end={{ end }}&fmt=xlsx">Download Excel</a><button type="button" class="btn ghost sm" onclick="print()">Print</button></form>{% endif %}
 {% include "includes/search_sort.html" %}

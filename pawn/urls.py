@@ -65,6 +65,7 @@ staff = [
     path("admin/employees/new/", V.employee_edit, name="employee_new"),
     path("admin/employees/<int:pk>/edit/", V.employee_edit, name="employee_edit"),
     path("admin/audit/", V.audit_log, name="audit_log"),
+    path("admin/rates/refresh/", V.rates_refresh, name="rates_refresh"),
     path("admin/backups/", V.backups, name="backups"),
     path("admin/sms/", V.sms_log, name="sms_log"),
 ]

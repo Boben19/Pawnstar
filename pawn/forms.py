@@ -251,9 +251,56 @@ class CategoryForm(StyledModelForm):
 
 
 class CurrencyForm(StyledModelForm):
+    CURRENCIES = [
+        ("PHP", "Philippine Peso", "₱"),
+        ("USD", "US Dollar", "$"),
+        ("EUR", "Euro", "€"),
+        ("JPY", "Japanese Yen", "¥"),
+        ("GBP", "British Pound", "£"),
+        ("AUD", "Australian Dollar", "A$"),
+        ("CAD", "Canadian Dollar", "C$"),
+        ("CHF", "Swiss Franc", "CHF"),
+        ("CNY", "Chinese Yuan", "¥"),
+        ("HKD", "Hong Kong Dollar", "HK$"),
+        ("SGD", "Singapore Dollar", "S$"),
+        ("KRW", "South Korean Won", "₩"),
+        ("THB", "Thai Baht", "฿"),
+        ("MYR", "Malaysian Ringgit", "RM"),
+        ("IDR", "Indonesian Rupiah", "Rp"),
+        ("INR", "Indian Rupee", "₹"),
+        ("NZD", "New Zealand Dollar", "NZ$"),
+        ("AED", "UAE Dirham", "AED"),
+        ("SAR", "Saudi Riyal", "SAR"),
+        ("TWD", "New Taiwan Dollar", "NT$"),
+    ]
+
+    code = forms.ChoiceField(
+        choices=[(code, f"{name} ({code})") for code, name, _ in CURRENCIES]
+    )
+
     class Meta:
         model = Currency
-        fields = ["code", "name", "symbol"]
+        fields = ["code"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.instance.pk:
+            self.fields["code"].disabled = True
+
+    def save(self, commit=True):
+        currency = super().save(commit=False)
+
+        for code, name, symbol in self.CURRENCIES:
+            if currency.code == code:
+                currency.name = name
+                currency.symbol = symbol
+                break
+
+        if commit:
+            currency.save()
+
+        return currency
 
 
 class RateForm(StyledModelForm):

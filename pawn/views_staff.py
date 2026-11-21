@@ -690,6 +690,9 @@ class CrudList(CrudBase, ListView):
             "sort_by": self.request.GET.get("sort_by", ""),
             "add_url": reverse(f"{self.key}_new"), "add_label": "Add",
         })
+
+        if self.key == "rates":
+            ctx["refresh_rates_url"] = reverse("rates_refresh")
         return ctx
 
 
@@ -856,3 +859,31 @@ def sms_log(request):
              "badge": 4} for s in page]
     return table(request, "SMS log", ["Sent", "Customer", "Type", "Message", "Status"], rows, page, qstr,
                  search=True, sort_options=SMS_SORT)
+
+@staff_only(ADMIN)
+@require_POST
+def rates_refresh(request):
+    """Refresh exchange rates for all configured currencies."""
+    updated = 0
+    failed = []
+
+    for currency in Currency.objects.order_by("code"):
+        try:
+            update_currency_rate(currency)
+            updated += 1
+        except Exception:
+            failed.append(currency.code)
+
+    if updated:
+        messages.success(
+            request,
+            f"Updated {updated} currency rate(s) to PHP."
+        )
+
+    if failed:
+        messages.warning(
+            request,
+            "Could not refresh: " + ", ".join(failed)
+        )
+
+    return redirect("rates_list")
