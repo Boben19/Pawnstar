@@ -4,6 +4,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django import forms
+from django.contrib.auth import password_validation
 from django.core.files.base import ContentFile
 from django.db import transaction as db_transaction
 from django.utils import timezone
@@ -388,3 +389,27 @@ class SupportForm(StyledModelForm):
     class Meta:
         model = SupportTicket
         fields = ["subject", "category"]
+
+
+class StaffPasswordChangeForm(Styled):
+    current = forms.CharField(label="Current password", widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}))
+    new = forms.CharField(label="New password", widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+                          help_text="At least 8 characters.")
+    confirm = forms.CharField(label="Confirm new password", widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}))
+
+    def __init__(self, *args, user, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+
+    def clean_new(self):
+        new = self.cleaned_data["new"]
+        password_validation.validate_password(new, self.user)
+        return new
+
+    def clean(self):
+        d = super().clean()
+        if d.get("new") and d.get("confirm") and d["new"] != d["confirm"]:
+            self.add_error("confirm", "The two passwords don't match.")
+        if d.get("new") and d.get("current") and d["new"] == d["current"]:
+            self.add_error("new", "Choose a password that is different from the current one.")
+        return d

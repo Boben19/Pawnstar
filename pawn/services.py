@@ -72,6 +72,29 @@ def mask(number):
 
 
 # ----------------------------------------------------------------------------------- audit
+TEMP_PASSWORD_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
+
+
+def temp_password(length=12):
+    """One-time password handed to a staff member by the administrator (no look-alike characters)."""
+    return "".join(secrets.choice(TEMP_PASSWORD_CHARS) for _ in range(length))
+
+
+def temp_pin():
+    """One-time 6 digit PIN handed to a customer at the counter."""
+    return f"{secrets.randbelow(10 ** 6):06d}"
+
+
+def register_failed_attempt(user, limit=5, minutes=15):
+    """Count a wrong current password/PIN. Locks the account for a while after `limit` misses."""
+    user.failed_pin_attempts += 1
+    if user.failed_pin_attempts >= limit:
+        user.locked_until = timezone.now() + timedelta(minutes=minutes)
+        user.failed_pin_attempts = 0
+    user.save(update_fields=["failed_pin_attempts", "locked_until"])
+    return user.is_locked()
+
+
 def audit(user, action, table, record_id=None, old=None, new=None):
     AuditLog.objects.create(
         user=user if getattr(user, "pk", None) else None, action=action, table_name=table,
@@ -644,17 +667,31 @@ def build_report(name, employee, params):
                 "headers": ["Ticket", "Customer", "Item", "Loan (PHP)", "Maturity", "Last day", "Due today", "Status"],
                 "rows": rows, "summary": [f"{len(rows)} open tickets", f"Principal out on loan PHP {peso(total)}"]}
     if name == "auction":
-        rows = []
+        rows, red_total, sale_total = [], ZERO, ZERO
         for r in Redemption.objects.filter(redeemed_at__gte=lo, redeemed_at__lt=hi).select_related("ticket", "ticket__customer"):
-            rows.append(["Redemption", r.ticket.ticket_no, r.ticket.customer.full_name, str(timezone.localtime(r.redeemed_at).date()),
-                         "Redeemed", peso(r.total_paid)])
-        for a in Auction.objects.filter(auction_date__gte=start, auction_date__lte=end).select_related("ticket", "ticket__customer"):
+            red_total += r.total_paid
+            rows.append(["Redemption", r.ticket.ticket_no, r.ticket.customer.full_name,
+                         str(timezone.localtime(r.redeemed_at).date()), "Redeemed", peso(r.total_paid)])
+        # An auction belongs in the range if it was scheduled, held or sold inside it.
+        in_range = (Q(auction_date__gte=start, auction_date__lte=end) | Q(created_at__gte=lo, created_at__lt=hi)
+                    | Q(sale__sold_at__gte=lo, sale__sold_at__lt=hi))
+        for a in Auction.objects.filter(in_range).select_related("ticket", "ticket__customer", "sale").distinct():
             sale = getattr(a, "sale", None)
-            rows.append(["Auction", a.ticket.ticket_no, a.ticket.customer.full_name, str(a.auction_date), a.status,
+            if sale:
+                sale_total += sale.sale_amount
+            shown = timezone.localtime(sale.sold_at).date() if sale else a.auction_date
+            rows.append(["Auction", a.ticket.ticket_no, a.ticket.customer.full_name, str(shown), a.status,
                          peso(sale.sale_amount) if sale else "0.00"])
+        rows.sort(key=lambda r: (r[3], r[1]))
+        n_red = sum(1 for r in rows if r[0] == "Redemption")
+        summary = [f"{n_red} redemptions (PHP {peso(red_total)})", f"{len(rows) - n_red} auction records",
+                   f"Auction sales PHP {peso(sale_total)}"]
+        if not rows:
+            summary.append("No redemptions or auctions in this date range. Other transactions (Sangla, Renewal, Padala, "
+                           "Load) are listed in the Daily Transaction Report.")
         return {"title": f"Auction and Redemption Report ({start} to {end})",
                 "headers": ["Kind", "Ticket", "Customer", "Date", "Result", "Amount (PHP)"], "rows": rows,
-                "summary": [f"{len(rows)} records"]}
+                "summary": summary}
     if name == "cashflow":
         rows, tin, tout = [], ZERO, ZERO
         for b in Branch.objects.all():

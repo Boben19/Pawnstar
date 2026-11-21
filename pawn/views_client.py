@@ -24,6 +24,9 @@ def client_only(view):
         u = request.user
         if not u.is_authenticated or not u.is_client or not hasattr(u, "customer"):
             return redirect("client_login")
+        if u.must_change_password and not getattr(view, "allow_pending_pin", False):
+            messages.info(request, "Please choose your own PIN to continue.")
+            return redirect("client_pin")
         request.cust = u.customer
         return view(request, *a, **kw)
     return inner
@@ -179,7 +182,8 @@ def recover(request):
             match.used_at = timezone.now()
             match.save(update_fields=["used_at"])
             user.pin_hash, user.failed_pin_attempts, user.locked_until = make_password(pin), 0, None
-            user.save(update_fields=["pin_hash", "failed_pin_attempts", "locked_until"])
+            user.must_change_password = False
+            user.save(update_fields=["pin_hash", "failed_pin_attempts", "locked_until", "must_change_password"])
             S.audit(user, "UPDATE", "users", user.pk, None, {"pin": "reset"})
             login(request, user, backend="django.contrib.auth.backends.ModelBackend")
             request.session["new_key"] = new_recovery_key(user)
@@ -305,6 +309,41 @@ def support_detail(request, pk):
 def profile(request):
     c = request.cust
     return render(request, "app/profile.html", {"c": c, "currencies": Currency.objects.all(), "cur": request.session.get("cur", "PHP")})
+
+
+def allow_pending_pin(view):
+    """Marks the page a customer may open while they still have to replace a temporary PIN."""
+    view.allow_pending_pin = True
+    return view
+
+
+@client_only
+@allow_pending_pin
+def change_pin(request):
+    """A signed in customer picks a new 6 digit PIN. Also used right after the counter resets a forgotten one."""
+    u = request.user
+    error = ""
+    if request.method == "POST":
+        current, new, confirm = (request.POST.get(k, "") for k in ("current", "pin", "pin2"))
+        if u.is_locked():
+            error = "Too many wrong PINs. Try again in a few minutes."
+        elif not check_password(current, u.pin_hash):
+            error = ("Too many wrong PINs. Try again in a few minutes." if S.register_failed_attempt(u, settings.PIN_MAX_ATTEMPTS, settings.PIN_LOCK_MINUTES)
+                     else "That isn't your current PIN.")
+        else:
+            error = valid_pin(new, confirm)
+            if not error and len(set(new)) == 1:
+                error = "That PIN is too easy to guess. Avoid repeating one digit."
+            if not error and new == current:
+                error = "Choose a PIN that is different from the current one."
+        if not error:
+            u.pin_hash, u.must_change_password = make_password(new), False
+            u.failed_pin_attempts, u.locked_until = 0, None
+            u.save(update_fields=["pin_hash", "must_change_password", "failed_pin_attempts", "locked_until"])
+            S.audit(u, "UPDATE", "users", u.pk, None, {"pin": "changed"})
+            messages.success(request, "Your PIN was changed.")
+            return redirect("client_home")
+    return render(request, "app/pin.html", {"error": error, "forced": u.must_change_password})
 
 
 @client_only

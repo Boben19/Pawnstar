@@ -44,6 +44,7 @@
   {% endwith %}
   <div class="grp">{{ user.get_full_name|default:user.username }} ({{ user.role_name }})</div>
   <div style="padding:8px 10px">{% include "_theme_toggle.html" %}</div>
+  <a class="nav {% if '/staff/password' in request.path %}on{% endif %}" href="/staff/password/">Change password</a>
   <a class="nav" href="/staff/logout/">Log out</a>
 </nav>
 <div class="side-scrim" aria-hidden="true"></div>

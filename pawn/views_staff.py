@@ -2,7 +2,8 @@ from datetime import timedelta
 from functools import wraps
 
 from django.contrib import messages
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
+from django.contrib.auth.hashers import make_password
 from django.core.paginator import Paginator
 from django.db.models import Count, ProtectedError, Q, Sum
 from django.http import FileResponse, Http404, HttpResponse
@@ -36,10 +37,19 @@ def staff_only(*roles):
             if roles and not u.is_admin_role and u.role_name not in roles:
                 messages.error(request, "Your role does not have access to that page.")
                 return redirect("staff_dashboard")
+            if u.must_change_password and not getattr(view, "allow_pending_password", False):
+                messages.info(request, "Please choose your own password before continuing.")
+                return redirect("staff_password")
             request.emp = u.employee
             return view(request, *a, **kw)
         return inner
     return deco
+
+
+def allow_pending_password(view):
+    """Marks the few pages a person may open while they still have to change a temporary password."""
+    view.allow_pending_password = True
+    return view
 
 
 def paginate(request, qs, per=20):
@@ -77,9 +87,10 @@ def table(request, title, headers, rows, page=None, qs="", **extra):
     return render(request, "staff/table.html", ctx)
 
 
-def form_page(request, title, form, back, multipart=False, submit="Save", note=""):
+def form_page(request, title, form, back, multipart=False, submit="Save", note="", reset_url=""):
     return render(request, "staff/form.html", {"title": title, "form": form, "back": back,
-                                               "multipart": multipart, "submit": submit, "note": note})
+                                               "multipart": multipart, "submit": submit, "note": note,
+                                               "reset_url": reset_url})
 
 
 def P(v):
@@ -122,6 +133,84 @@ def staff_login(request):
 def staff_logout(request):
     logout(request)
     return redirect("staff_login")
+
+
+# --------------------------------------------------------------------- passwords and PINs
+@staff_only()
+@allow_pending_password
+def staff_password(request):
+    """Any employee (administrator, cashier, appraiser) changes their own password."""
+    u = request.user
+    forced = u.must_change_password
+    form = F.StaffPasswordChangeForm(request.POST or None, user=u)
+    if request.method == "POST":
+        if u.is_locked():
+            fail(request, "Too many wrong attempts. Try again in a few minutes.")
+        elif form.is_valid():
+            if not u.check_password(form.cleaned_data["current"]):
+                locked = S.register_failed_attempt(u)
+                form.add_error("current", "Too many wrong attempts. Try again in a few minutes." if locked
+                               else "That isn't your current password.")
+            else:
+                u.set_password(form.cleaned_data["new"])
+                u.must_change_password, u.failed_pin_attempts, u.locked_until = False, 0, None
+                u.save()
+                update_session_auth_hash(request, u)      # keeps this browser signed in, signs out the others
+                S.audit(u, "UPDATE", "users", u.pk, None, {"password": "changed"})
+                messages.success(request, "Your password was changed.")
+                return redirect("staff_dashboard")
+    note = ("You are using a temporary password. Choose your own to continue." if forced
+            else "Enter your current password, then the new one.")
+    return form_page(request, "Change password", form, "/staff/logout/" if forced else "/staff/",
+                     submit="Change password", note=note)
+
+
+@staff_only(CASHIER)
+def staff_credential(request):
+    """Shows a temporary password or PIN once. We only keep a scrambled copy, so it can't be shown again."""
+    cred = request.session.pop("temp_cred", None)
+    if not cred:
+        return redirect("staff_dashboard")
+    return render(request, "staff/credential.html", cred)
+
+
+@staff_only(ADMIN)
+@require_POST
+def employee_reset_password(request, pk):
+    emp = get_object_or_404(Employee.objects.select_related("user"), pk=pk)
+    user = emp.user
+    if user.pk == request.user.pk:
+        messages.error(request, "Use Change password for your own account.")
+        return redirect("employee_edit", pk=emp.pk)
+    temp = S.temp_password()
+    user.set_password(temp)
+    user.must_change_password, user.failed_pin_attempts, user.locked_until = True, 0, None
+    user.save()                                  # a new password also signs them out of every open session
+    S.audit(request.user, "UPDATE", "users", user.pk, None, {"password": "reset by administrator"})
+    request.session["temp_cred"] = {"who": emp.full_name, "label": "Temporary password", "secret": temp,
+                                    "extra": f"Username: {user.username}",
+                                    "hint": "Give it to them in person. They must choose their own password at the next sign in.",
+                                    "back": "/staff/admin/employees/"}
+    return redirect("staff_credential")
+
+
+@staff_only(CASHIER)
+@require_POST
+def customer_reset_pin(request, pk):
+    c = get_object_or_404(Customer, pk=pk)
+    if not c.user_id:
+        messages.error(request, f"{c.full_name} hasn't signed up for the app yet, so there is no PIN to reset.")
+        return redirect("customer_detail", pk=c.pk)
+    temp = S.temp_pin()
+    user = c.user
+    user.pin_hash = make_password(temp)
+    user.must_change_password, user.failed_pin_attempts, user.locked_until = True, 0, None
+    user.save(update_fields=["pin_hash", "must_change_password", "failed_pin_attempts", "locked_until"])
+    S.audit(request.user, "UPDATE", "users", user.pk, None, {"pin": "reset at the counter"})
+    request.session["temp_cred"] = {"who": c.full_name, "label": "Temporary PIN", "secret": temp, "extra": "",
+                                    "hint": "Check their ID first, then give it to them in person. The app asks them to choose a new PIN right after they sign in.",
+                                    "back": f"/staff/customers/{c.pk}/"}
+    return redirect("staff_credential")
 
 
 # --------------------------------------------------------------------------- dashboard
@@ -836,7 +925,8 @@ def employee_edit(request, pk=None):
         S.audit(request.user, "UPDATE" if emp else "CREATE", "employees", saved.pk)
         messages.success(request, "Employee saved.")
         return redirect("employees")
-    return form_page(request, "Edit employee" if emp else "Add employee", form, "/staff/admin/employees/")
+    return form_page(request, "Edit employee" if emp else "Add employee", form, "/staff/admin/employees/",
+                     reset_url=reverse("employee_reset_password", args=[emp.pk]) if emp else "")
 
 
 AUDIT_SORT = [("-logged_at", "Newest first"), ("logged_at", "Oldest first"), ("action", "Action"), ("table_name", "Table")]

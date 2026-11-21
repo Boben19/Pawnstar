@@ -115,6 +115,14 @@ They cover the interest maths, renewal then redemption, short payments, the auct
 - Serve over HTTPS and run behind a proper web server (gunicorn or similar), and move to PostgreSQL if more than one branch will use it at once.
 - Receipt PDFs are only handed out through a permission check, but in development mode Django also serves the `media/` folder openly. Turn DEBUG off or block that path in production.
 
+## Passwords and PINs
+
+- **Staff** (administrator, cashier, appraiser): *Change password* is at the bottom of the sidebar.
+- **Forgot a staff password**: the administrator opens Employees, picks the person and presses *Reset password*. It shows a one-time temporary password and the employee must choose their own at the next sign in.
+- **Forgot the administrator password**: no one else can reset it from the website. On the server run `python manage.py changepassword admin`.
+- **Customers**: *Change PIN* is on the profile page. A customer who forgot their PIN can use their recovery key at *Forgot PIN*, or a cashier can press *Reset app PIN* on the customer's page after checking their ID.
+- After pulling this update run `python manage.py migrate`.
+
 ## Folder tour
 
 ```

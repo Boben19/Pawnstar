@@ -1,0 +1,12 @@
+{% extends "app/base.html" %}
+{% block content %}
+<h1>{% if forced %}Choose your own PIN{% else %}Change PIN{% endif %}</h1>
+{% if forced %}<p class="soft">You signed in with a temporary PIN from the counter. Pick a new 6 digit PIN to continue.</p>{% endif %}
+{% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+<form method="post" class="card flat">{% csrf_token %}
+<div class="field"><label for="cur">Current PIN</label><input class="in pin" id="cur" name="current" type="password" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="current-password" autofocus required></div>
+<div class="field"><label for="np">New PIN</label><input class="in pin" id="np" name="pin" type="password" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="new-password" required></div>
+<div class="field"><label for="np2">Confirm new PIN</label><input class="in pin" id="np2" name="pin2" type="password" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="new-password" required></div>
+<button class="btn block">Save new PIN</button></form>
+{% if not forced %}<p class="small"><a href="/app/profile/">Cancel</a></p>{% endif %}
+{% endblock %}

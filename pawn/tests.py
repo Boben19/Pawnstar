@@ -99,6 +99,28 @@ class ReportsShowTransactions(TestCase):
         r = self.client.get(f"/staff/reports/daily/?start={first}&end={last}")
         self.assertEqual(r.status_code, 200)
 
+    def test_auction_report_catches_redemptions_and_auctions_done_today(self):
+        emp = User.objects.get(username="admin").employee
+        today = timezone.localdate()
+        t = PawnTicket.objects.filter(status__in=PawnTicket.OPEN).first()
+        S.redeem_ticket(t, S.compute_due(t)["redeem_total"], emp)
+        rep = S.build_report("auction", emp, {"start": today, "end": today})
+        self.assertEqual([r[0] for r in rep["rows"]], ["Redemption"])
+
+        # An auction scheduled for a past date but created and sold today must still show for today.
+        expired = PawnTicket.objects.filter(status="Expired").first()
+        self.assertIsNotNone(expired, "seed data should include an expired ticket")
+        a = S.schedule_auction(expired, Decimal("1000"), today - timedelta(days=10), emp)
+        S.record_auction(a, "Sold", emp, "Pedro Lim", "09170000000", Decimal("1500"))
+        rep = S.build_report("auction", emp, {"start": today, "end": today})
+        self.assertEqual(sorted(r[0] for r in rep["rows"]), ["Auction", "Redemption"])
+
+    def test_empty_auction_report_explains_itself(self):
+        emp = User.objects.get(username="admin").employee
+        rep = S.build_report("auction", emp, {"start": date(2020, 1, 1), "end": date(2020, 1, 2)})
+        self.assertEqual(rep["rows"], [])
+        self.assertTrue(any("Daily Transaction Report" in x for x in rep["summary"]))
+
     def test_reversed_dates_are_swapped(self):
         today = timezone.localdate()
         rep = S.build_report("daily", User.objects.get(username="admin").employee,

@@ -40,6 +40,7 @@ class User(AbstractUser):
     status = models.CharField(max_length=10, default="Active",
                               choices=[("Active", "Active"), ("Inactive", "Inactive"), ("Locked", "Locked")])
     last_login_at = models.DateTimeField(null=True, blank=True)
+    must_change_password = models.BooleanField(default=False)   # set after a staff reset; cleared once they choose their own
     created_at = models.DateTimeField(default=timezone.now)
 
     @property
