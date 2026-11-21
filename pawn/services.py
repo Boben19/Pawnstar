@@ -10,7 +10,7 @@ import json
 import secrets
 import urllib.parse
 import urllib.request
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from cryptography.fernet import Fernet
@@ -486,7 +486,7 @@ def run_alerts(today=None):
             kind = "Expired"
             text = (f"ticket {t.ticket_no} is past maturity. {(t.expiry_date - today).days} days left "
                     f"before the item goes to auction.")
-        if kind and not SMSLog.objects.filter(ticket=t, message_type=kind, sent_at__date=today).exists():
+        if kind and not SMSLog.objects.filter(ticket=t, message_type=kind, sent_at__gte=day_range(today, today)[0], sent_at__lt=day_range(today, today)[1]).exists():
             send_sms(t.customer, f"Only Pawns: {text}", kind, t)
             sent += 1
         if t.expiry_date < today:
@@ -597,8 +597,20 @@ def verify_google_token(id_token):
 
 
 # -------------------------------------------------------------------------------- reports
+def day_range(start, end):
+    """Timezone-aware [start, end + 1 day) bounds for filtering a DateTimeField by calendar days.
+
+    Used instead of `field__date` lookups: on MySQL those need the server's timezone tables loaded
+    (CONVERT_TZ), and without them they silently match nothing, so reports came back empty even though
+    the records exist. Plain datetime comparisons work on every database.
+    """
+    tz = timezone.get_current_timezone()
+    return (timezone.make_aware(datetime.combine(start, time.min), tz),
+            timezone.make_aware(datetime.combine(end + timedelta(days=1), time.min), tz))
+
+
 def _txn_rows(qs):
-    return [[t.transaction_no, timezone.localtime(t.created_at).strftime("%I:%M %p"), t.transaction_type.type_name,
+    return [[t.transaction_no, timezone.localtime(t.created_at).strftime("%b %d, %Y %I:%M %p"), t.transaction_type.type_name,
              t.customer.full_name, peso(t.amount), peso(t.fee), t.status, t.employee.full_name if t.employee else "App"]
             for t in qs]
 
@@ -608,15 +620,18 @@ def build_report(name, employee, params):
     today = timezone.localdate()
     start = params.get("start") or today
     end = params.get("end") or start
+    if start > end:
+        start, end = end, start
+    lo, hi = day_range(start, end)
     if name == "daily":
-        qs = Transaction.objects.filter(created_at__date__gte=start, created_at__date__lte=end).select_related(
+        qs = Transaction.objects.filter(created_at__gte=lo, created_at__lt=hi).select_related(
             "customer", "transaction_type", "employee")
         if not employee.user.is_admin_role:
             qs = qs.filter(employee=employee)
         rows = _txn_rows(qs.order_by("created_at"))
         total = sum((t.amount for t in qs.exclude(status="Voided")), ZERO)
         return {"title": f"Daily Transaction Report ({start} to {end})",
-                "headers": ["Transaction", "Time", "Type", "Customer", "Amount (PHP)", "Fee", "Status", "Handled by"],
+                "headers": ["Transaction", "Date & time", "Type", "Customer", "Amount (PHP)", "Fee", "Status", "Handled by"],
                 "rows": rows, "summary": [f"{len(rows)} transactions", f"Total amount PHP {peso(total)}"]}
     if name == "active":
         rows, total = [], ZERO
@@ -630,7 +645,7 @@ def build_report(name, employee, params):
                 "rows": rows, "summary": [f"{len(rows)} open tickets", f"Principal out on loan PHP {peso(total)}"]}
     if name == "auction":
         rows = []
-        for r in Redemption.objects.filter(redeemed_at__date__gte=start, redeemed_at__date__lte=end).select_related("ticket", "ticket__customer"):
+        for r in Redemption.objects.filter(redeemed_at__gte=lo, redeemed_at__lt=hi).select_related("ticket", "ticket__customer"):
             rows.append(["Redemption", r.ticket.ticket_no, r.ticket.customer.full_name, str(timezone.localtime(r.redeemed_at).date()),
                          "Redeemed", peso(r.total_paid)])
         for a in Auction.objects.filter(auction_date__gte=start, auction_date__lte=end).select_related("ticket", "ticket__customer"):
@@ -643,7 +658,7 @@ def build_report(name, employee, params):
     if name == "cashflow":
         rows, tin, tout = [], ZERO, ZERO
         for b in Branch.objects.all():
-            led = CashLedger.objects.filter(branch=b, recorded_at__date__gte=start, recorded_at__date__lte=end)
+            led = CashLedger.objects.filter(branch=b, recorded_at__gte=lo, recorded_at__lt=hi)
             i = led.filter(direction="IN").aggregate(s=Sum("amount"))["s"] or ZERO
             o = led.filter(direction="OUT").aggregate(s=Sum("amount"))["s"] or ZERO
             tin, tout = tin + i, tout + o

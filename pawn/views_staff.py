@@ -130,7 +130,8 @@ def dashboard(request):
     today = timezone.localdate()
     open_t = PawnTicket.objects.filter(status__in=PawnTicket.OPEN).select_related("customer", "item")
     soon = open_t.filter(maturity_date__lte=today + timedelta(days=7)).order_by("maturity_date")
-    led = CashLedger.objects.filter(recorded_at__date=today)
+    lo, hi = S.day_range(today, today)
+    led = CashLedger.objects.filter(recorded_at__gte=lo, recorded_at__lt=hi)
     if not request.user.is_admin_role:
         led = led.filter(branch=request.emp.branch)
     ctx = {

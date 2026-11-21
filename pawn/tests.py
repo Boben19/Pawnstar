@@ -83,6 +83,34 @@ class Access(TestCase):
         self.assertEqual(self.client.get("/staff/reports/daily/").status_code, 200)
 
 
+class ReportsShowTransactions(TestCase):
+    def setUp(self):
+        call_command("seed", verbosity=0)
+        self.client.login(username="admin", password="OnlyPawns#2026")
+
+    def test_daily_report_lists_every_transaction_in_range(self):
+        from .models import Transaction
+        total = Transaction.objects.count()
+        self.assertGreater(total, 0)
+        first = timezone.localtime(Transaction.objects.order_by("created_at").first().created_at).date()
+        last = timezone.localtime(Transaction.objects.order_by("created_at").last().created_at).date()
+        rep = S.build_report("daily", User.objects.get(username="admin").employee, {"start": first, "end": last})
+        self.assertEqual(len(rep["rows"]), total)
+        r = self.client.get(f"/staff/reports/daily/?start={first}&end={last}")
+        self.assertEqual(r.status_code, 200)
+
+    def test_reversed_dates_are_swapped(self):
+        today = timezone.localdate()
+        rep = S.build_report("daily", User.objects.get(username="admin").employee,
+                             {"start": today, "end": today - timedelta(days=3)})
+        self.assertIn(str(today - timedelta(days=3)), rep["title"])
+
+    def test_day_range_is_exclusive_of_next_day(self):
+        d = date(2026, 3, 5)
+        lo, hi = S.day_range(d, d)
+        self.assertEqual(hi - lo, timedelta(days=1))
+
+
 class ListsSearchSortPaging(TestCase):
     def setUp(self):
         call_command("seed", verbosity=0)
