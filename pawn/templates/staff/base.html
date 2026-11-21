@@ -55,4 +55,30 @@
 </div>
 {% block scripts %}{% endblock %}
 <script src="{% static 'pawn/js/app.js' %}"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const sidebar = document.querySelector(".side");
+
+    if (!sidebar) return;
+
+    // Restore the previous sidebar scroll position
+    const savedPosition = sessionStorage.getItem("sidebarScroll");
+
+    if (savedPosition !== null) {
+        sidebar.scrollTop = Number(savedPosition);
+    }
+
+    // Save the position whenever the sidebar is scrolled
+    sidebar.addEventListener("scroll", function () {
+        sessionStorage.setItem("sidebarScroll", sidebar.scrollTop);
+    });
+
+    // Save the position before navigating to another page
+    window.addEventListener("pagehide", function () {
+        sessionStorage.setItem("sidebarScroll", sidebar.scrollTop);
+    });
+});
+</script>
+
 </body></html>

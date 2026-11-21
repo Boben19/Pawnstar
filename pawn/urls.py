@@ -70,6 +70,9 @@ staff = [
     path("admin/sms/", V.sms_log, name="sms_log"),
 ]
 for key, (lst, new, edit, delete) in V.CRUDS.items():
+    if key == "rates":
+        new = edit = delete = V.rates_read_only
+
     staff += [
         path(f"admin/{key}/", lst, name=f"{key}_list"),
         path(f"admin/{key}/new/", new, name=f"{key}_new"),

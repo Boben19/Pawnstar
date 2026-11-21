@@ -663,6 +663,17 @@ class CrudList(CrudBase, ListView):
 
     def get_queryset(self):
         qs = super().get_queryset()
+
+        if self.key == "rates":
+            latest_ids = [
+                ExchangeRate.objects.filter(currency_id=currency_id)
+                .order_by("-effective_date", "-id")
+                .values_list("id", flat=True)
+                .first()
+                for currency_id in Currency.objects.values_list("id", flat=True)
+            ]
+
+            qs = qs.filter(id__in=[pk for pk in latest_ids if pk is not None])
         q = self.request.GET.get("q", "").strip()
         if q and self.search_fields:
             cond = Q()
@@ -693,6 +704,12 @@ class CrudList(CrudBase, ListView):
 
         if self.key == "rates":
             ctx["refresh_rates_url"] = reverse("rates_refresh")
+            ctx["add_url"] = None
+
+            for row in ctx["rows"]:
+                row["url"] = None
+                row["delete"] = None
+
         return ctx
 
 
@@ -732,8 +749,8 @@ class CrudCreate(CrudFormMixin, CreateView):
             except Exception:
                 messages.warning(
                     self.request,
-                    "Currency saved, but the exchange rate "
-                    "could not be fetched. Please enter it manually."
+                    "Currency saved, but its exchange rate could not be fetched. "
+                    "Please try Refresh All Rates later."
                 )
 
         return response
@@ -887,3 +904,10 @@ def rates_refresh(request):
         )
 
     return redirect("rates_list")
+
+@staff_only(ADMIN)
+def rates_read_only(request, **kwargs):
+    return HttpResponse(
+        "Exchange rates are managed automatically. Manual changes are disabled.",
+        status=403,
+    )

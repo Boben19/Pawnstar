@@ -358,9 +358,25 @@ def renew_ticket(ticket, tendered, employee):
 def create_padala(employee, customer, currency, amount, receiver_name, receiver_mobile, receiver_branch):
     require_active(customer)
     amount = q(amount)
+
     if amount <= 0:
         raise PawnError("Enter an amount greater than zero.")
-    rate = currency.rate()
+
+    if currency.code == "PHP":
+        rate = Decimal("1")
+    else:
+        latest_rate = currency.rates.order_by(
+            "-effective_date", "-id"
+        ).first()
+
+        if latest_rate is None or latest_rate.rate_to_php <= 0:
+            raise PawnError(
+                f"No valid PHP exchange rate is available for {currency.code}. "
+                "Please ask an administrator to refresh exchange rates."
+            )
+
+        rate = latest_rate.rate_to_php
+
     php = q(amount * rate)
     fee = max(settings.PADALA_MIN_FEE, q(php * settings.PADALA_FEE_RATE))
     txn = new_txn(TransactionType.PADALA, customer, employee, amount=php, fee=fee, currency=currency, original=amount, rate=rate)
