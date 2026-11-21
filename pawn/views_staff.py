@@ -14,6 +14,7 @@ from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 
 from . import forms as F
 from . import services as S
+from .exchange_rates import update_currency_rate
 from .models import (
     Appraisal, Auction, AuditLog, BackupLog, Branch, CashLedger, Currency, Customer, CustomerID, Employee,
     ExchangeRate, IDType, ItemCategory, MobileLoad, PawnTicket, Receipt, Remittance, Role, SMSLog, SupportMessage,
@@ -713,7 +714,26 @@ class CrudFormMixin(CrudBase):
 
 
 class CrudCreate(CrudFormMixin, CreateView):
-    pass
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+
+        if self.key == "currencies":
+            try:
+                rate = update_currency_rate(self.object)
+                messages.success(
+                    self.request,
+                    f"Exchange rate updated: "
+                    f"1 {self.object.code} = {rate} PHP"
+                )
+            except Exception:
+                messages.warning(
+                    self.request,
+                    "Currency saved, but the exchange rate "
+                    "could not be fetched. Please enter it manually."
+                )
+
+        return response
 
 
 class CrudUpdate(CrudFormMixin, UpdateView):
