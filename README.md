@@ -2,7 +2,7 @@
 
 A computerized pawnshop system for Palawan Pawn Star. Customers use a phone app (a PWA). Employees use a dashboard in the browser. Both sit on the same Django project and the same database.
 
-**Group:** Jhon Grover Longsud, Allan Dexter P. Cuizon, Leeh Vann Joshua Lomocso
+**Group:** Jhon Grover Longsud, Allan Dexter P. Cuizon, Leeh Vann Joshua Lomocso, Roniella Gwen Capuno, and Ramaidha Digermo
 
 ## Run it
 
